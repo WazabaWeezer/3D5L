@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stick Figure Game with Blocks and Triangles</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+
+      #gameCanvas {
+        position: relative;
+        width: 100%;
+        height: 100vh;
+      }
+
+      .stick-figure {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        background-image: url("smile.Png");
+        background-size: contain;
+        background-repeat: no-repeat;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .floor {
+        position: absolute;
+        width: 200%; /* Adjusted to allow scrolling effect */
+        height: 20px;
+        background-image: url("bloodbrick.png");
+        background-size: cover;
+        bottom: 0;
+      }
+
+      .background {
+        position: absolute;
+        width: 200%;
+        height: 100%;
+        background-image: url("bloodbackground.png");
+        background-size: cover;
+        background-repeat: repeat-x;
+        top: 0;
+        left: 0;
+      }
+
+      .block {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        background-image: url("bloodbrick.png");
+        background-size: cover;
+      }
+
+      .triangle {
+        position: absolute;
+        width: 0;
+        height: 0;
+        border-left: 30px solid transparent;
+        border-right: 30px solid transparent;
+        border-bottom: 60px solid transparent; /* Use transparent for the triangle itself */
+      }
+
+      .triangle-texture {
+        position: absolute;
+        width: 60px; /* Adjust size */
+        height: 60px; /* Adjust size */
+        background-image: url("bloodbrick.png");
+        background-size: cover;
+        top: -60px; /* Adjusted position behind the triangle */
+        left: -30px; /* Center it behind the triangle */
+      }
+    </style>
+  </head>
+  <body>
+    <div id="gameCanvas">
+      <div class="background" id="background"></div>
+      <div class="floor" id="floor"></div>
+      <div id="stickFigure" class="stick-figure"></div>
+    </div>
+
+    <script>
+      const stickFigure = document.getElementById("stickFigure");
+      const gameCanvas = document.getElementById("gameCanvas");
+      const background = document.getElementById("background");
+      const floor = document.getElementById("floor");
+
+      let posX = 0;
+      const gravity = 0.8;
+      const jumpForce = -15;
+      let verticalVelocity = 0;
+      let isJumping = false;
+      let floorY = window.innerHeight - 80;
+      const keys = {};
+      let blocks = [];
+      let blockSpawnInterval = 500; // Initial spawn interval for blocks
+      let timeSinceLastBlock = 0;
+      let distanceTraveled = 0; // Track distance traveled
+
+      function createBlock() {
+        const block = document.createElement("div");
+        block.classList.add("block");
+
+        // Spawn blocks on the floor
+        block.style.left = `${window.innerWidth + Math.random() * 200}px`;
+        block.style.top = `${floorY - 60}px`; // Spawn on the floor
+
+        gameCanvas.appendChild(block);
+        blocks.push({ element: block, falling: true }); // Add block to array with falling status
+      }
+
+      function createTriangleFormation(levelY) {
+        // Function to create triangles
+        for (let i = 0; i < 3; i++) {
+          const triangle = document.createElement("div");
+          triangle.classList.add("triangle");
+          triangle.style.left = `${window.innerWidth + Math.random() * 200}px`;
+          triangle.style.top = `${levelY}px`;
+
+          const triangleTexture = document.createElement("div");
+          triangleTexture.classList.add("triangle-texture");
+          triangleTexture.style.top = `0px`; // Position of the texture should be adjusted
+          triangleTexture.style.left = `0px`; // Center it behind the triangle
+
+          gameCanvas.appendChild(triangle);
+          gameCanvas.appendChild(triangleTexture); // Append the textured square behind the triangle
+          blocks.push({ element: triangle, falling: false }); // Non-falling blocks
+        }
+
+        // Create the top triangle
+        for (let i = 0; i < 1; i++) {
+          const triangle = document.createElement("div");
+          triangle.classList.add("triangle");
+          triangle.style.left = `${window.innerWidth + Math.random() * 200}px`;
+          triangle.style.top = `${levelY - 60}px`; // Top triangle
+
+          const triangleTexture = document.createElement("div");
+          triangleTexture.classList.add("triangle-texture");
+          triangleTexture.style.top = `0px`; // Position of the texture should be adjusted
+          triangleTexture.style.left = `0px`; // Center it behind the triangle
+
+          gameCanvas.appendChild(triangle);
+          gameCanvas.appendChild(triangleTexture); // Append the textured square behind the triangle
+          blocks.push({ element: triangle, falling: false }); // Non-falling block
+        }
+      }
+
+      function moveBlocks(movement) {
+        blocks.forEach((blockObj, index) => {
+          const block = blockObj.element;
+          const blockX = parseInt(block.style.left, 10);
+          const blockY = parseInt(block.style.top, 10);
+
+          // Check if the block is falling
+          if (blockObj.falling) {
+            if (blockY < window.innerHeight - 80) {
+              // Keep falling until it hits the floor
+              block.style.top = `${blockY + gravity}px`;
+            }
+          }
+
+          // Move the block
+          block.style.left = `${blockX - movement}px`;
+
+          // Remove blocks that have moved off-screen
+          if (blockX < -60) {
+            block.remove();
+            blocks.splice(index, 1);
+          }
+
+          // Check for collision with stick figure
+          const stickFigureX = window.innerWidth / 2 - 30;
+          const stickFigureY = parseInt(stickFigure.style.top, 10);
+
+          // Simple collision detection for standing on blocks
+          if (
+            stickFigureX < blockX + 60 &&
+            stickFigureX + 60 > blockX &&
+            stickFigureY + 60 >= blockY &&
+            stickFigureY < blockY + 60
+          ) {
+            floorY = blockY - 60; // Stick figure stands on the block
+            isJumping = false;
+            verticalVelocity = 0;
+          }
+        });
+      }
+
+      function moveBackground() {
+        let movement = 0;
+
+        if (keys["a"]) movement -= 2; // Move background left (stick figure appears to move right)
+        if (keys["d"]) movement += 2; // Move background right (stick figure appears to move left)
+
+        posX += movement;
+        distanceTraveled += Math.abs(movement); // Track distance traveled
+
+        // Increase block spawn rate as player travels further
+        if (distanceTraveled > 1000) {
+          blockSpawnInterval = Math.max(
+            100,
+            500 - Math.floor(distanceTraveled / 10)
+          ); // Decrease interval
+        }
+
+        // Move the background and floor to create the illusion of infinite scrolling
+        background.style.left = `${(posX % window.innerWidth) * -1}px`; // Loop background
+        floor.style.left = `${(posX % window.innerWidth) * -1}px`; // Loop floor
+
+        // Jumping mechanics
+        if ((keys[" "] || keys["w"]) && !isJumping) {
+          verticalVelocity = jumpForce;
+          isJumping = true;
+        }
+
+        // Apply gravity
+        verticalVelocity += gravity;
+        floorY += verticalVelocity;
+
+        // Check if the stick figure has landed
+        if (floorY >= window.innerHeight - 80) {
+          floorY = window.innerHeight - 80;
+          isJumping = false;
+          verticalVelocity = 0;
+        }
+
+        // Ensure the stick figure remains centered vertically
+        stickFigure.style.top = `${floorY}px`;
+
+        // Move the blocks
+        moveBlocks(movement);
+
+        // Block spawning logic
+        timeSinceLastBlock += Math.abs(movement);
+        if (timeSinceLastBlock > blockSpawnInterval) {
+          createBlock();
+          createTriangleFormation(floorY - 60); // Spawns triangle at player's level
+          timeSinceLastBlock = 0;
+        }
+      }
+
+      window.addEventListener("keydown", (event) => {
+        keys[event.key] = true;
+      });
+
+      window.addEventListener("keyup", (event) => {
+        keys[event.key] = false;
+      });
+
+      function gameLoop() {
+        moveBackground();
+        requestAnimationFrame(gameLoop);
+      }
+
+      gameLoop();
+    </script>
+  </body>
+</html>
